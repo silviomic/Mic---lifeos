@@ -1,10 +1,15 @@
-# MIC LifeOS 1.0 Alpha PWA
+# MIC LifeOS 1.1
 
-Caricare nella radice del repository:
-- index.html
-- manifest.webmanifest
-- sw.js
-- README.md
-- cartella icons con icon-192.png e icon-512.png
+PWA personale per dati quotidiani, missioni, MIC Score ed Eureka.
 
-Poi: Settings → Pages → Deploy from a branch → main → /(root) → Save.
+## Novità 1.1
+- salvataggio automatico dei dati e della bozza Eureka;
+- archivio Eureka con ricerca, stato, modifica ed eliminazione;
+- pulsante “Sviluppa Eureka” che copia il prompt MIC e apre ChatGPT;
+- sincronizzazione bidirezionale con Google Fogli tramite Apps Script;
+- cache PWA aggiornata.
+
+## Pubblicazione
+Caricare tutti i file nella radice del repository GitHub Pages, mantenendo la cartella `icons`.
+
+Per Google Fogli leggere `ISTRUZIONI_GOOGLE_FOGLI.txt` e usare `GoogleAppsScript.gs`.

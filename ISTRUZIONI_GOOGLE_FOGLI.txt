@@ -1,0 +1,33 @@
+MIC LifeOS 1.1 — Configurazione Google Fogli
+
+1. Apri Google Drive dal PC e crea un nuovo Foglio Google chiamato “MIC LifeOS Database”.
+2. Nel Foglio scegli: Estensioni > Apps Script.
+3. Cancella il codice presente e incolla tutto il contenuto del file GoogleAppsScript.gs.
+4. Nella prima parte del codice sostituisci:
+   const SECRET_KEY = 'CAMBIA_QUESTA_CHIAVE';
+   con una chiave personale, per esempio una frase lunga senza apostrofi.
+5. Premi Salva.
+6. In alto a destra scegli Distribuisci > Nuova distribuzione.
+7. Tipo: Applicazione web.
+8. Esegui come: Me.
+9. Chi ha accesso: Chiunque.
+10. Premi Distribuisci e autorizza lo script con il tuo account Google.
+11. Copia l’URL che termina con /exec.
+12. Apri MIC LifeOS > Dati.
+13. Incolla l’URL nel campo “URL Web App”.
+14. Inserisci la stessa chiave nel campo “Chiave personale”.
+15. Premi “Salva configurazione” e poi “Sincronizza ora”.
+
+Il Foglio creerà automaticamente due schede:
+- Giorni
+- Eureka
+
+Verifica:
+- inserisci una Eureka nella PWA;
+- premi Salva Eureka;
+- riapri il Foglio e controlla la scheda Eureka.
+
+Nota sulla sicurezza:
+- non condividere pubblicamente la chiave;
+- il link della Web App può essere pubblico, ma senza la chiave non accetta né restituisce i dati;
+- per cambiare chiave, modifica SECRET_KEY e crea una nuova versione della distribuzione.
