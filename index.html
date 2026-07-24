@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#eaf7ed">
+<meta name="description" content="MIC LifeOS 1.0 Alpha">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" href="./icons/icon-192.png">
+<link rel="apple-touch-icon" href="./icons/icon-192.png">
+<title>MIC LifeOS</title>
+<style>
+:root{--bg:#eef8ef;--card:#fff;--ink:#173c2b;--muted:#6d8076;--accent:#67c997;--line:#d7e7dc;--warn:#f2bd58}
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--ink)}
+.app{max-width:760px;margin:auto;min-height:100dvh;padding:18px 16px 100px}
+header{display:flex;justify-content:space-between;align-items:center}.date{color:var(--muted)}h1{margin:.2rem 0 1rem;font-size:2rem}
+.card{background:var(--card);border:1px solid var(--line);border-radius:22px;padding:17px;margin:12px 0;box-shadow:0 8px 24px rgba(25,74,48,.08)}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.big{font-size:2.2rem;font-weight:850}.label,.small{color:var(--muted)}
+.bar{height:11px;background:#edf1ee;border-radius:99px;overflow:hidden;margin-top:14px}.bar span{display:block;height:100%;background:var(--accent)}
+h2{font-size:1.1rem;margin:0 0 12px}.mission{font-size:1.45rem;font-weight:820;margin-bottom:5px}
+label{display:block;font-weight:700;margin:13px 0 6px}
+input[type=number],textarea{width:100%;border:1px solid var(--line);border-radius:13px;padding:12px;background:#fbfefc;font-size:1rem}
+textarea{min-height:90px}input[type=range]{width:100%;accent-color:var(--accent)}
+.range{display:flex;justify-content:space-between}.value{font-weight:850;font-size:1.2rem}
+button{border:0;border-radius:15px;padding:13px;font-weight:800;font-size:1rem}.primary{width:100%;background:var(--accent);color:var(--ink);margin-top:13px}
+.secondary{background:#fff;border:1px solid var(--line);color:var(--ink)}.voice{width:100%;background:var(--warn);color:#392a0b;margin-top:12px}
+.install{display:none;background:var(--ink);color:#fff}
+.actions{display:flex;gap:8px;flex-wrap:wrap}.actions button{flex:1}.notice{background:#fff8dc;border:1px solid #efdca1;padding:11px;border-radius:13px}
+.page{display:none}.page.active{display:block}.item{padding:11px 0;border-bottom:1px solid var(--line)}
+nav{position:fixed;bottom:0;left:0;right:0;display:flex;justify-content:center;background:rgba(255,255,255,.97);border-top:1px solid var(--line);padding:7px 5px calc(7px + env(safe-area-inset-bottom))}
+nav button{flex:1;max-width:190px;background:none;color:var(--muted);padding:7px 2px}nav button.active{color:#197048}
+</style>
+</head>
+<body>
+<div class="app">
+<header><div><div class="date" id="date"></div><h1>OGGI</h1></div><button class="install" id="install">Installa</button></header>
+
+<section class="page active" id="today">
+<div class="grid">
+<div class="card"><div class="big" id="score">—</div><div class="label">MIC Score</div><div class="bar"><span id="scorebar"></span></div></div>
+<div class="card"><div class="big"><span id="energyview">5</span>/10</div><div class="label">Energia</div><div class="bar"><span id="energybar" style="width:50%"></span></div></div>
+</div>
+<div class="card"><h2>MISSIONE PRINCIPALE</h2><div class="mission" id="mission">Inserisci i dati e genera la missione.</div><div class="small" id="reason">La missione si adatta alla giornata.</div></div>
+<div class="card">
+<h2>Dati della giornata</h2>
+<label>Passi</label><input id="steps" type="number" min="0">
+<label>Corsa (km)</label><input id="run" type="number" min="0" step=".1">
+<label>Bici (km)</label><input id="bike" type="number" min="0" step=".1">
+<label>Lavoro manuale (minuti)</label><input id="manual" type="number" min="0">
+<label>Peso (kg)</label><input id="weight" type="number" min="0" step=".1">
+<label>Sonno (ore)</label><input id="sleep" type="number" min="0" step=".1">
+<label>Energia</label><div class="range"><span>Bassa</span><span class="value" id="energyval">5</span><span>Alta</span></div><input id="energy" type="range" min="1" max="10" value="5">
+<label>Recupero</label><div class="range"><span>Basso</span><span class="value" id="recoveryval">5</span><span>Alto</span></div><input id="recovery" type="range" min="1" max="10" value="5">
+<label>Fastidio/dolore</label><div class="range"><span>Nullo</span><span class="value" id="painval">2</span><span>Forte</span></div><input id="pain" type="range" min="0" max="10" value="2">
+<button class="primary" id="saveday">SALVA E AGGIORNA MIC</button>
+</div>
+<div class="card"><h2>Riepilogo serale</h2><textarea id="evening"></textarea><button class="primary" id="saveevening">SALVA RIEPILOGO</button></div>
+</section>
+
+<section class="page" id="eureka">
+<div class="card"><h2>💡 Ho avuto un’Eureka</h2><textarea id="eurekatext" placeholder="Registra subito l’idea."></textarea><button class="voice" id="voice">🎙️ DETTA L’IDEA</button><button class="primary" id="saveeureka">SALVA EUREKA</button></div>
+<div class="card"><h2>Idee recenti</h2><div id="eurekalist" class="small">Nessuna idea.</div></div>
+</section>
+
+<section class="page" id="week"><div class="card"><h2>Ultimi 7 giorni</h2><div id="weeklist"></div></div></section>
+
+<section class="page" id="data">
+<div class="card"><h2>Dati e backup</h2><div class="notice">I dati restano sul dispositivo. Esporta periodicamente un backup.</div><div class="actions"><button class="secondary" id="export">Esporta</button><button class="secondary" id="import">Importa</button><input hidden id="file" type="file" accept=".json,application/json"></div><button class="secondary" id="clear" style="width:100%;margin-top:10px">Cancella tutti i dati</button></div>
+<div class="card"><h2>Stato applicazione</h2><div id="status" class="small"></div></div>
+</section>
+</div>
+
+<nav><button class="active" data-page="today">🏠<br>Oggi</button><button data-page="eureka">💡<br>Eureka</button><button data-page="week">📅<br>Settimana</button><button data-page="data">💾<br>Dati</button></nav>
+
+<script>
+const K='mic-lifeos-pwa-v1', $=x=>document.getElementById(x), key=()=>new Date().toISOString().slice(0,10);
+let db={days:{},eurekas:[]};try{db=JSON.parse(localStorage.getItem(K))||db}catch(e){};db.days||={};db.eurekas||=[];
+const persist=()=>localStorage.setItem(K,JSON.stringify(db)), num=x=>Number($(x).value)||0;
+function day(){db.days[key()]||={};return db.days[key()]}
+function score(d){const m=Math.min(35,(d.steps||0)/350+(d.run||0)*3+(d.bike||0)*1.5+(d.manual||0)/20),r=((d.energy||5)+(d.recovery||5))*2.5,s=Math.min(20,(d.sleep||0)*2.7);return Math.max(0,Math.min(100,Math.round(m+r+s-(d.pain||0)*2)))}
+function mission(d){if((d.pain||0)>=6)return['Recupero attivo','Bici dolce o camminata, senza forzare.'];if((d.energy||5)<=4||(d.recovery||5)<=4)return['Missione leggera','20–30 minuti di movimento facile e mobilità.'];if((d.run||0)>=5)return['Consolida il recupero','Hai già corso: idratazione, mobilità e riposo.'];if((d.bike||0)<4)return['4 km in bicicletta','Missione semplice e coerente con la routine.'];return['Movimento + creatività','Completa il movimento e cattura almeno un’Eureka.']}
+function sync(){energyval.textContent=energy.value;recoveryval.textContent=recovery.value;painval.textContent=pain.value;energyview.textContent=energy.value;energybar.style.width=energy.value*10+'%'}
+function render(){const d=day(),s=score(d),m=mission(d);$('score').textContent=s;$('scorebar').style.width=s+'%';$('mission').textContent=m[0];$('reason').textContent=m[1]}
+function load(){const d=day();['steps','run','bike','manual','weight','sleep','energy','recovery','pain','evening'].forEach(i=>{if(d[i]!==undefined)$(i).value=d[i]});sync();render()}
+['energy','recovery','pain'].forEach(i=>$(i).oninput=sync);
+$('saveday').onclick=()=>{const d=day();['steps','run','bike','manual','weight','sleep','energy','recovery','pain'].forEach(i=>d[i]=num(i));d.updatedAt=new Date().toISOString();persist();render();alert('Giornata salvata.')};
+$('saveevening').onclick=()=>{day().evening=$('evening').value.trim();persist();alert('Riepilogo salvato.')};
+function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]))}
+function re(){const a=db.eurekas.slice().reverse().slice(0,10);$('eurekalist').innerHTML=a.length?a.map(x=>`<div class="item"><b>${new Date(x.at).toLocaleString('it-IT')}</b><br>${esc(x.text)}</div>`).join(''):'Nessuna idea.'}
+$('saveeureka').onclick=()=>{const t=$('eurekatext').value.trim();if(!t)return alert('Scrivi o detta un’idea.');db.eurekas.push({at:new Date().toISOString(),text:t});persist();$('eurekatext').value='';re();alert('Eureka salvato.')};
+$('voice').onclick=()=>{const S=window.SpeechRecognition||window.webkitSpeechRecognition;if(!S)return alert('Dettatura non disponibile.');const r=new S();r.lang='it-IT';r.onresult=e=>$('eurekatext').value+=( $('eurekatext').value?' ':'')+e.results[0][0].transcript;r.start()};
+function rw(){const a=Object.keys(db.days).sort().reverse().slice(0,7);$('weeklist').innerHTML=a.length?a.map(k=>{const d=db.days[k];return`<div class="item"><b>${new Date(k+'T12:00:00').toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'short'})}</b> — MIC ${score(d)}<br><span class="small">Passi ${d.steps||0} · Corsa ${d.run||0} km · Bici ${d.bike||0} km · Energia ${d.energy||'-'}/10</span></div>`}).join(''):'Nessun dato.'}
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.querySelectorAll('nav button').forEach(x=>x.classList.remove('active'));$(b.dataset.page).classList.add('active');b.classList.add('active');if(b.dataset.page==='week')rw();if(b.dataset.page==='eureka')re()});
+$('export').onclick=()=>{const b=new Blob([JSON.stringify(db,null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='MIC_LifeOS_backup_'+key()+'.json';a.click();URL.revokeObjectURL(a.href)};
+$('import').onclick=()=>$('file').click();$('file').onchange=async e=>{try{const x=JSON.parse(await e.target.files[0].text());if(!x.days||!x.eurekas)throw 0;db=x;persist();load();re();alert('Backup importato.')}catch(_){alert('Backup non valido.')}};
+$('clear').onclick=()=>{if(confirm('Cancellare tutti i dati?')){localStorage.removeItem(K);location.reload()}};
+let promptEvent;addEventListener('beforeinstallprompt',e=>{e.preventDefault();promptEvent=e;$('install').style.display='block'});$('install').onclick=async()=>{if(promptEvent){promptEvent.prompt();await promptEvent.userChoice;promptEvent=null;$('install').style.display='none'}};
+if('serviceWorker'in navigator)navigator.serviceWorker.register('./sw.js').then(()=>$('status').textContent='PWA pronta e funzionamento offline attivo.').catch(()=>$('status').textContent='Offline disponibile dopo pubblicazione HTTPS.');
+$('date').textContent=new Intl.DateTimeFormat('it-IT',{weekday:'long',day:'numeric',month:'long'}).format(new Date());load();re();
+</script>
+</body></html>
