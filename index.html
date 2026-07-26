@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#eaf7ed">
-<meta name="description" content="MIC LifeOS 1.1">
+<meta name="description" content="MIC LifeOS 1.2 STABLE">
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="icon" href="./icons/icon-192.png">
 <link rel="apple-touch-icon" href="./icons/icon-192.png">
@@ -68,64 +68,122 @@ nav button{flex:1;max-width:190px;background:none;color:var(--muted);padding:7px
 
 <section class="page" id="data">
 <div class="card"><h2>Sincronizzazione Google Fogli</h2><div class="notice">Inserisci l'URL della Web App di Google Apps Script e una chiave personale. I dati restano anche sul telefono.</div><label>URL Web App</label><input id="syncurl" type="url" placeholder="https://script.google.com/macros/s/.../exec"><label>Chiave personale</label><input id="synckey" type="password" placeholder="Scegli una parola o frase segreta"><div class="actions" style="margin-top:12px"><button class="secondary" id="savesync">Salva configurazione</button><button class="secondary" id="syncnow">Sincronizza ora</button><button class="secondary" id="pullnow">Recupera dal Foglio</button></div><div id="syncstatus" class="autosave"></div></div>
-<div class="card"><h2>Dati e backup</h2><div class="ok">La MIC salva automaticamente sul dispositivo. Il backup manuale resta consigliato.</div><div class="actions" style="margin-top:12px"><button class="secondary" id="export">Esporta</button><button class="secondary" id="import">Importa</button><input hidden id="file" type="file" accept=".json,application/json"></div><button class="danger" id="clear" style="width:100%;margin-top:10px">Cancella tutti i dati</button></div>
-<div class="card"><h2>Stato applicazione</h2><div id="status" class="small"></div></div>
+<div class="card"><h2>Dati e backup</h2><div class="ok">Protezione attiva: copia locale, copie di sicurezza automatiche e verifica su Google Fogli.</div><div class="actions" style="margin-top:12px"><button class="secondary" id="export">Esporta</button><button class="secondary" id="import">Importa</button><input hidden id="file" type="file" accept=".json,application/json"></div><button class="danger" id="clear" style="width:100%;margin-top:10px">Cancella tutti i dati</button></div>
+<div class="card"><h2>Registro affidabilità</h2><div id="reliability" class="small"></div></div><div class="card"><h2>Stato applicazione</h2><div id="status" class="small"></div></div>
 </section>
 </div>
 
 <nav><button class="active" data-page="today">🏠<br>Oggi</button><button data-page="eureka">💡<br>Eureka</button><button data-page="week">📅<br>Settimana</button><button data-page="data">☁️<br>Dati</button></nav>
 
 <script>
-const K='mic-lifeos-pwa-v1', CFG='mic-lifeos-sync-v1', DRAFT='mic-lifeos-eureka-draft-v1';
+const K='mic-lifeos-pwa-v1', K12='mic-lifeos-pwa-v1.2', CFG='mic-lifeos-sync-v1', DRAFT='mic-lifeos-eureka-draft-v1';
+const SNAP_PREFIX='mic-lifeos-snapshot-', LOGK='mic-lifeos-reliability-log';
 const $=x=>document.getElementById(x), key=()=>new Date().toISOString().slice(0,10), now=()=>new Date().toISOString();
-let db={version:'1.1',days:{},eurekas:[]};
-try{const saved=JSON.parse(localStorage.getItem(K));if(saved)db={version:'1.1',...saved}}catch(e){}
-db.days||={};db.eurekas||=[];
-let cfg={url:'',key:''};try{cfg={...cfg,...JSON.parse(localStorage.getItem(CFG))}}catch(e){}
-const persist=()=>localStorage.setItem(K,JSON.stringify(db));
+let db={version:'1.2',days:{},eurekas:[],meta:{updatedAt:now(),deviceId:''}};
+let cfg={url:'',key:''};
+const deviceId=()=>{let x=localStorage.getItem('mic-lifeos-device-id');if(!x){x=(crypto.randomUUID?crypto.randomUUID():'d-'+Date.now()+'-'+Math.random().toString(16).slice(2));localStorage.setItem('mic-lifeos-device-id',x)}return x};
+db.meta.deviceId=deviceId();
+function loadInitial(){
+  const candidates=[K12,K];
+  for(const k of candidates){try{const x=JSON.parse(localStorage.getItem(k));if(x&&x.days&&Array.isArray(x.eurekas)){db={version:'1.2',days:{},eurekas:[],meta:{},...x};break}}catch(e){}}
+  db.days||={};db.eurekas||=[];db.meta={deviceId:deviceId(),updatedAt:now(),...(db.meta||{})};
+  const migrated=migrateEurekas(db.eurekas);
+  try{cfg={...cfg,...JSON.parse(localStorage.getItem(CFG))}}catch(e){}
+  if(migrated)persist('migrazione Eureka precedenti');
+}
+function log(msg,type='info'){const list=readLog();list.unshift({at:now(),msg,type});localStorage.setItem(LOGK,JSON.stringify(list.slice(0,40)));renderReliability()}
+function readLog(){try{return JSON.parse(localStorage.getItem(LOGK))||[]}catch(e){return[]}}
+function renderReliability(){const el=$('reliability');if(!el)return;const list=readLog();el.innerHTML=list.length?list.slice(0,8).map(x=>`<div class="item"><b>${new Date(x.at).toLocaleString('it-IT')}</b><br>${esc(x.msg)}</div>`).join(''):'Nessun evento registrato.'}
+function snapshot(reason){
+  const stamp=Date.now();
+  try{localStorage.setItem(SNAP_PREFIX+stamp,JSON.stringify({reason,at:now(),data:db}));const keys=Object.keys(localStorage).filter(k=>k.startsWith(SNAP_PREFIX)).sort().reverse();keys.slice(12).forEach(k=>localStorage.removeItem(k));return true}catch(e){log('Backup locale non riuscito: spazio insufficiente.','error');return false}
+}
+function persist(reason='salvataggio'){db.version='1.2';db.meta={...(db.meta||{}),deviceId:deviceId(),updatedAt:now()};snapshot(reason);localStorage.setItem(K12,JSON.stringify(db));localStorage.setItem(K,JSON.stringify(db));log('Copia locale salvata: '+reason)}
 const persistCfg=()=>localStorage.setItem(CFG,JSON.stringify(cfg));
 const num=x=>Number($(x).value)||0;
 const debounce=(fn,ms=500)=>{let t;return(...a)=>{clearTimeout(t);t=setTimeout(()=>fn(...a),ms)}};
+function legacyEurekaId(x){
+  const source=[x.at||'',x.text||'',x.status||'Idea'].join('|');
+  let hash=2166136261;
+  for(let i=0;i<source.length;i++){hash^=source.charCodeAt(i);hash=Math.imul(hash,16777619)}
+  return 'legacy-'+(hash>>>0).toString(16).padStart(8,'0');
+}
+function migrateEurekas(list){
+  let changed=false;
+  (list||[]).forEach(x=>{
+    if(!x.id){x.id=legacyEurekaId(x);changed=true}
+    if(!x.updatedAt){x.updatedAt=x.at||now();changed=true}
+    if(!Number.isFinite(Number(x.revision))||Number(x.revision)<1){x.revision=1;changed=true}else x.revision=Number(x.revision);
+    if(typeof x.deleted!=='boolean'){x.deleted=false;changed=true}
+  });
+  return changed;
+}
+function eurekaWins(candidate,current){
+  if(!current)return true;
+  const candidateRevision=Number(candidate.revision)||1,currentRevision=Number(current.revision)||1;
+  if(candidateRevision!==currentRevision)return candidateRevision>currentRevision;
+  const candidateTime=new Date(candidate.updatedAt||candidate.at||0).getTime()||0,currentTime=new Date(current.updatedAt||current.at||0).getTime()||0;
+  if(candidateTime!==currentTime)return candidateTime>currentTime;
+  return candidate.deleted===true&&current.deleted!==true;
+}
 function day(){db.days[key()]||={date:key()};return db.days[key()]}
 function score(d){const m=Math.min(35,(d.steps||0)/350+(d.run||0)*3+(d.bike||0)*1.5+(d.manual||0)/20),r=((d.energy||5)+(d.recovery||5))*2.5,s=Math.min(20,(d.sleep||0)*2.7);return Math.max(0,Math.min(100,Math.round(m+r+s-(d.pain||0)*2)))}
-function mission(d){if((d.pain||0)>=6)return['Recupero attivo','Bici dolce o camminata, senza forzare.'];if((d.energy||5)<=4||(d.recovery||5)<=4)return['Missione leggera','20–30 minuti di movimento facile e mobilità.'];if((d.run||0)>=5)return['Consolida il recupero','Hai già corso: idratazione, mobilità e riposo.'];if((d.bike||0)<4)return['4 km in bicicletta','Missione semplice e coerente con la routine.'];return['Movimento + creatività','Completa il movimento e cattura almeno un’Eureka.']}
-function syncRanges(){energyval.textContent=energy.value;recoveryval.textContent=recovery.value;painval.textContent=pain.value;energyview.textContent=energy.value;energybar.style.width=energy.value*10+'%'}
+function mission(d){if((d.pain||0)>=6)return['Recupero attivo','Bici dolce o camminata, senza forzare.'];if((d.energy||5)<=4||(d.recovery||5)<=4)return['Missione leggera','20–30 minuti di movimento facile e recupero.'];if((d.run||0)>=5)return['Consolida il recupero','Hai già corso: bici leggera, mobilità e idratazione.'];return['Muovi il sistema','Corsa 6 km oppure bici e lavoro manuale, in base alle sensazioni.']}
+function syncRanges(){['energy','recovery','pain'].forEach(i=>$(i+'val').textContent=$(i).value);$('energyview').textContent=$('energy').value;$('energybar').style.width=($('energy').value*10)+'%'}
 function render(){const d=day(),s=score(d),m=mission(d);$('score').textContent=s;$('scorebar').style.width=s+'%';$('mission').textContent=m[0];$('reason').textContent=m[1]}
 function load(){const d=day();['steps','run','bike','manual','weight','sleep','energy','recovery','pain','evening'].forEach(i=>{if(d[i]!==undefined)$(i).value=d[i]});syncRanges();render();$('syncurl').value=cfg.url||'';$('synckey').value=cfg.key||'';try{const dr=JSON.parse(localStorage.getItem(DRAFT));if(dr){$('eurekatext').value=dr.text||'';$('eurekastatus').value=dr.status||'Idea'}}catch(e){}}
-function saveDayLocal(){const d=day();['steps','run','bike','manual','weight','sleep','energy','recovery','pain'].forEach(i=>d[i]=num(i));d.score=score(d);d.updatedAt=now();persist();render();$('dayautosave').textContent='Salvato automaticamente alle '+new Date().toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'});}
-const autoSaveDay=debounce(saveDayLocal,450);
+function saveDayLocal(){const d=day();['steps','run','bike','manual','weight','sleep','energy','recovery','pain'].forEach(i=>d[i]=num(i));d.score=score(d);d.updatedAt=now();persist('dati giornata');render();$('dayautosave').textContent='Salvato automaticamente alle '+new Date().toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'});scheduleAutoSync()}
+const autoSaveDay=debounce(saveDayLocal,500);
 ['steps','run','bike','manual','weight','sleep','energy','recovery','pain'].forEach(i=>$(i).addEventListener('input',()=>{if(['energy','recovery','pain'].includes(i))syncRanges();autoSaveDay()}));
-$('evening').addEventListener('input',debounce(()=>{day().evening=$('evening').value.trim();day().updatedAt=now();persist();$('eveningautosave').textContent='Riepilogo salvato automaticamente.'},450));
-$('saveday').onclick=async()=>{saveDayLocal();await pushAll();alert('Giornata salvata.')};
-$('saveevening').onclick=async()=>{day().evening=$('evening').value.trim();day().updatedAt=now();persist();await pushAll();alert('Riepilogo salvato.')};
-function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]))}
+$('evening').addEventListener('input',debounce(()=>{day().evening=$('evening').value.trim();day().updatedAt=now();persist('riepilogo serale');$('eveningautosave').textContent='Riepilogo salvato automaticamente.';scheduleAutoSync()},500));
+$('saveday').onclick=async()=>{saveDayLocal();const ok=await syncAndVerify();alert(ok?'Giornata salvata e verificata.':'Giornata salvata sul telefono; sincronizzazione da verificare.')};
+$('saveevening').onclick=async()=>{day().evening=$('evening').value.trim();day().updatedAt=now();persist('riepilogo serale');const ok=await syncAndVerify();alert(ok?'Riepilogo salvato e verificato.':'Riepilogo salvato sul telefono; sincronizzazione da verificare.')};
+function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]))}
 function uuid(){return crypto.randomUUID?crypto.randomUUID():'e-'+Date.now()+'-'+Math.random().toString(16).slice(2)}
 function saveDraft(){localStorage.setItem(DRAFT,JSON.stringify({text:$('eurekatext').value,status:$('eurekastatus').value,updatedAt:now()}));$('eurekaautosave').textContent='Bozza salvata automaticamente.'}
 $('eurekatext').addEventListener('input',debounce(saveDraft,350));$('eurekastatus').addEventListener('change',saveDraft);
-function filteredEurekas(){const q=$('eurekasearch').value.trim().toLowerCase(),st=$('statusfilter').value;return db.eurekas.filter(x=>(!q||(x.text||'').toLowerCase().includes(q))&&(!st||x.status===st)).sort((a,b)=>new Date(b.updatedAt||b.at)-new Date(a.updatedAt||a.at))}
+function activeEurekas(){return db.eurekas.filter(x=>!x.deleted)}
+function filteredEurekas(){const q=$('eurekasearch').value.trim().toLowerCase(),st=$('statusfilter').value;return activeEurekas().filter(x=>(!q||(x.text||'').toLowerCase().includes(q))&&(!st||x.status===st)).sort((a,b)=>new Date(b.updatedAt||b.at)-new Date(a.updatedAt||a.at))}
 function re(){const a=filteredEurekas();$('eurekalist').innerHTML=a.length?a.map(x=>`<div class="item"><div class="item-head"><b>${new Date(x.at).toLocaleString('it-IT')}</b><span class="pill">${esc(x.status||'Idea')}</span></div><div class="item-text">${esc(x.text)}</div><div class="item-actions"><button class="secondary" onclick="editEureka('${x.id}')">Modifica</button><button class="secondary" onclick="developEureka('${x.id}')">✨ Sviluppa</button><button class="danger" onclick="deleteEureka('${x.id}')">Elimina</button></div></div>`).join(''):'Nessuna idea trovata.'}
 $('eurekasearch').oninput=re;$('statusfilter').onchange=re;
-$('saveeureka').onclick=async()=>{const t=$('eurekatext').value.trim();if(!t)return alert('Scrivi o detta un’idea.');db.eurekas.push({id:uuid(),at:now(),updatedAt:now(),text:t,status:$('eurekastatus').value||'Idea'});persist();localStorage.removeItem(DRAFT);$('eurekatext').value='';$('eurekastatus').value='Idea';re();await pushAll();alert('Eureka salvata.')};
-window.editEureka=id=>{const x=db.eurekas.find(e=>e.id===id);if(!x)return;const text=prompt('Modifica l’Eureka:',x.text);if(text===null||!text.trim())return;const states=['Idea','Da approfondire','Esperimento','Progetto','Realizzato'];const status=prompt('Stato: '+states.join(' / '),x.status||'Idea');x.text=text.trim();if(states.includes(status))x.status=status;x.updatedAt=now();persist();re();pushAll()};
-window.deleteEureka=id=>{if(!confirm('Eliminare questa Eureka?'))return;db.eurekas=db.eurekas.filter(e=>e.id!==id);persist();re();pushAll()};
-function promptFor(text){return `Agisci come MIC 9.0. Sviluppa questa Eureka come una Macchina dell’Innovazione.\n\nEureka: ${text}\n\nProduci: 1) sintesi centrale; 2) collegamenti con progetti e idee precedenti; 3) impatto e fattibilità; 4) rischi o punti deboli; 5) massimo tre prossimi passi concreti; 6) priorità; 7) una possibile evoluzione inattesa. Concludi con una sintesi a punti e una sola azione prioritaria.`}
+$('saveeureka').onclick=async()=>{const t=$('eurekatext').value.trim();if(!t)return alert('Scrivi o detta un’idea.');const x={id:uuid(),at:now(),updatedAt:now(),text:t,status:$('eurekastatus').value||'Idea',deleted:false,revision:1};db.eurekas.push(x);persist('nuova Eureka '+x.id);localStorage.removeItem(DRAFT);$('eurekatext').value='';$('eurekastatus').value='Idea';re();const ok=await syncAndVerify(x.id);alert(ok?'Eureka salvata sul telefono e verificata nel Foglio.':'Eureka salvata sul telefono. La copia online non è ancora verificata: non è persa e verrà ritentata.')};
+window.editEureka=async id=>{const x=db.eurekas.find(e=>e.id===id&&!e.deleted);if(!x)return;const text=prompt('Modifica l’Eureka:',x.text);if(text===null||!text.trim())return;const states=['Idea','Da approfondire','Esperimento','Progetto','Realizzato'];const status=prompt('Stato: '+states.join(' / '),x.status||'Idea');x.text=text.trim();if(states.includes(status))x.status=status;x.updatedAt=now();x.revision=(x.revision||1)+1;persist('modifica Eureka '+id);re();await syncAndVerify(id)};
+window.deleteEureka=async id=>{if(!confirm('Spostare questa Eureka nel cestino? Rimarrà recuperabile nei backup.'))return;const x=db.eurekas.find(e=>e.id===id);if(!x)return;x.deleted=true;x.deletedAt=now();x.updatedAt=now();x.revision=(x.revision||1)+1;persist('eliminazione esplicita Eureka '+id);re();await syncAndVerify(id)};
+function promptFor(text){return `Agisci come MIC 9.0. Sviluppa questa Eureka come una Macchina dell’Innovazione.
+
+Eureka: ${text}
+
+Produci: 1) sintesi centrale; 2) collegamenti con progetti e idee precedenti; 3) impatto e fattibilità; 4) rischi o punti deboli; 5) massimo tre prossimi passi concreti; 6) priorità; 7) una possibile evoluzione inattesa. Concludi con una sintesi a punti e una sola azione prioritaria.`}
 async function openChatGPT(text){if(!text.trim())return alert('Scrivi o seleziona un’Eureka.');const p=promptFor(text.trim());try{await navigator.clipboard.writeText(p);alert('Prompt copiato. Si apre ChatGPT: incollalo nella conversazione.')}catch(e){alert('Si apre ChatGPT. Copia manualmente il testo se necessario.')}window.open('https://chatgpt.com/','_blank','noopener')}
 $('developdraft').onclick=()=>openChatGPT($('eurekatext').value);window.developEureka=id=>{const x=db.eurekas.find(e=>e.id===id);if(x)openChatGPT(x.text)};
 $('voice').onclick=()=>{const S=window.SpeechRecognition||window.webkitSpeechRecognition;if(!S)return alert('Dettatura non disponibile su questo browser.');const r=new S();r.lang='it-IT';r.continuous=false;r.interimResults=false;r.onresult=e=>{$('eurekatext').value+=( $('eurekatext').value?' ':'')+e.results[0][0].transcript;saveDraft()};r.onerror=()=>alert('Dettatura interrotta. Riprova.');r.start()};
 function rw(){const a=Object.keys(db.days).sort().reverse().slice(0,7);$('weeklist').innerHTML=a.length?a.map(k=>{const d=db.days[k];return`<div class="item"><b>${new Date(k+'T12:00:00').toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'short'})}</b> — MIC ${score(d)}<br><span class="small">Passi ${d.steps||0} · Corsa ${d.run||0} km · Bici ${d.bike||0} km · Energia ${d.energy||'-'}/10</span></div>`}).join(''):'Nessun dato.'}
-document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.querySelectorAll('nav button').forEach(x=>x.classList.remove('active'));$(b.dataset.page).classList.add('active');b.classList.add('active');if(b.dataset.page==='week')rw();if(b.dataset.page==='eureka')re()});
-$('export').onclick=()=>{const b=new Blob([JSON.stringify(db,null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='MIC_LifeOS_backup_'+key()+'.json';a.click();URL.revokeObjectURL(a.href)};
-$('import').onclick=()=>$('file').click();$('file').onchange=async e=>{try{const x=JSON.parse(await e.target.files[0].text());if(!x.days||!x.eurekas)throw 0;db={version:'1.1',...x};persist();load();re();alert('Backup importato.')}catch(_){alert('Backup non valido.')}};
-$('clear').onclick=()=>{if(confirm('Cancellare tutti i dati locali? I dati nel Foglio Google non verranno cancellati.')){localStorage.removeItem(K);localStorage.removeItem(DRAFT);location.reload()}};
-$('savesync').onclick=()=>{cfg.url=$('syncurl').value.trim();cfg.key=$('synckey').value.trim();persistCfg();$('syncstatus').textContent='Configurazione salvata.'};
-function syncPayload(){return{version:'1.1',deviceUpdatedAt:now(),days:db.days,eurekas:db.eurekas}}
-async function pushAll(){cfg.url=$('syncurl').value.trim()||cfg.url;cfg.key=$('synckey').value.trim()||cfg.key;persistCfg();if(!cfg.url||!cfg.key){$('syncstatus').textContent='Sincronizzazione non configurata.';return false}try{const body=new URLSearchParams({action:'push',key:cfg.key,payload:JSON.stringify(syncPayload())});await fetch(cfg.url,{method:'POST',mode:'no-cors',body});$('syncstatus').textContent='Dati inviati al Foglio alle '+new Date().toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'})+'.';return true}catch(e){$('syncstatus').textContent='Invio non riuscito: controlla URL e connessione.';return false}}
-$('syncnow').onclick=pushAll;
-function jsonp(url){return new Promise((resolve,reject)=>{const cb='micCb'+Date.now()+Math.random().toString(16).slice(2);const s=document.createElement('script');const timer=setTimeout(()=>{cleanup();reject(new Error('timeout'))},15000);function cleanup(){clearTimeout(timer);delete window[cb];s.remove()}window[cb]=data=>{cleanup();resolve(data)};s.onerror=()=>{cleanup();reject(new Error('script'))};s.src=url+(url.includes('?')?'&':'?')+new URLSearchParams({action:'pull',key:cfg.key,callback:cb,ts:Date.now()});document.body.appendChild(s)})}
-function mergeRemote(remote){if(!remote)return;for(const [k,v] of Object.entries(remote.days||{})){const l=db.days[k];if(!l||new Date(v.updatedAt||0)>new Date(l.updatedAt||0))db.days[k]=v}const map=new Map(db.eurekas.map(x=>[x.id,x]));for(const x of remote.eurekas||[]){const l=map.get(x.id);if(!l||new Date(x.updatedAt||x.at||0)>new Date(l.updatedAt||l.at||0))map.set(x.id,x)}db.eurekas=[...map.values()];persist()}
-$('pullnow').onclick=async()=>{cfg.url=$('syncurl').value.trim()||cfg.url;cfg.key=$('synckey').value.trim()||cfg.key;persistCfg();if(!cfg.url||!cfg.key)return $('syncstatus').textContent='Inserisci URL e chiave.';try{$('syncstatus').textContent='Recupero in corso…';const res=await jsonp(cfg.url);if(!res.ok)throw new Error(res.error||'errore');mergeRemote(res.data);load();re();rw();$('syncstatus').textContent='Dati recuperati e uniti con quelli locali.'}catch(e){$('syncstatus').textContent='Recupero non riuscito. Controlla distribuzione, URL e chiave.'}};
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.querySelectorAll('nav button').forEach(x=>x.classList.remove('active'));$(b.dataset.page).classList.add('active');b.classList.add('active');if(b.dataset.page==='week')rw();if(b.dataset.page==='eureka')re();if(b.dataset.page==='data')renderReliability()});
+$('export').onclick=()=>{const b=new Blob([JSON.stringify({exportedAt:now(),app:'MIC LifeOS 1.2 STABLE',data:db},null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='MIC_LifeOS_STABLE_backup_'+key()+'.json';document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1000);log('Backup manuale richiesto: controllare la cartella Download.')};
+$('import').onclick=()=>$('file').click();$('file').onchange=async e=>{try{const raw=JSON.parse(await e.target.files[0].text());const x=raw.data||raw;if(!x.days||!Array.isArray(x.eurekas))throw 0;snapshot('prima importazione');db={version:'1.2',days:{},eurekas:[],meta:{},...x};migrateEurekas(db.eurekas);persist('backup importato');load();re();alert('Backup importato e protetto.')}catch(_){alert('Backup non valido.')}};
+$('clear').onclick=()=>{const phrase=prompt('Per cancellare i dati locali scrivi esattamente CANCELLA MIC. I dati online non verranno eliminati.');if(phrase==='CANCELLA MIC'){snapshot('prima cancellazione locale');localStorage.removeItem(K12);localStorage.removeItem(K);localStorage.removeItem(DRAFT);location.reload()}else if(phrase!==null)alert('Cancellazione annullata.')};
+$('savesync').onclick=()=>{cfg.url=$('syncurl').value.trim();cfg.key=$('synckey').value.trim();persistCfg();$('syncstatus').textContent='Configurazione salvata.';log('Configurazione sincronizzazione aggiornata.')};
+function syncPayload(){return{version:'1.2',deviceUpdatedAt:now(),deviceId:deviceId(),days:db.days,eurekas:db.eurekas}}
+function jsonp(url,params={}){return new Promise((resolve,reject)=>{const cb='micCb'+Date.now()+Math.random().toString(16).slice(2),s=document.createElement('script');const timer=setTimeout(()=>{cleanup();reject(new Error('timeout'))},20000);function cleanup(){clearTimeout(timer);delete window[cb];s.remove()}window[cb]=data=>{cleanup();resolve(data)};s.onerror=()=>{cleanup();reject(new Error('script'))};s.src=url+(url.includes('?')?'&':'?')+new URLSearchParams({...params,callback:cb,ts:Date.now()});document.body.appendChild(s)})}
+async function pushAll(){cfg.url=$('syncurl').value.trim()||cfg.url;cfg.key=$('synckey').value.trim()||cfg.key;persistCfg();if(!cfg.url||!cfg.key){$('syncstatus').textContent='Sincronizzazione non configurata.';return false}try{const body=new URLSearchParams({action:'push',key:cfg.key,payload:JSON.stringify(syncPayload())});await fetch(cfg.url,{method:'POST',mode:'no-cors',body});$('syncstatus').textContent='Dati inviati; verifica in corso…';return true}catch(e){$('syncstatus').textContent='Invio non riuscito: dati conservati sul telefono.';log('Invio online non riuscito. I dati locali sono integri.','error');return false}}
+const scheduleAutoSync=debounce(async()=>{if(!navigator.onLine||!cfg.url||!cfg.key)return;const ok=await pushAll();if(ok)$('syncstatus').textContent='Dati giornalieri sincronizzati automaticamente.'},1500);
+function mergeRemote(remote){if(!remote)return;migrateEurekas(db.eurekas);migrateEurekas(remote.eurekas||[]);for(const [k,v] of Object.entries(remote.days||{})){const l=db.days[k];if(!l||new Date(v.updatedAt||0)>new Date(l.updatedAt||0))db.days[k]=v}const map=new Map(db.eurekas.map(x=>[x.id,x]));for(const x of remote.eurekas||[]){const l=map.get(x.id);if(eurekaWins(x,l))map.set(x.id,x)}db.eurekas=[...map.values()];persist('unione dati dal Foglio')}
+async function pullRemote(){if(!cfg.url||!cfg.key)throw new Error('config');const res=await jsonp(cfg.url,{action:'pull',key:cfg.key});if(!res.ok)throw new Error(res.error||'errore');return res.data}
+async function syncAndVerify(targetId=''){
+  const sent=await pushAll();if(!sent)return false;
+  await new Promise(r=>setTimeout(r,1800));
+  try{const remote=await pullRemote();mergeRemote(remote);const ok=targetId?remote.eurekas?.some(x=>x.id===targetId&&new Date(x.updatedAt||0)>=new Date((db.eurekas.find(e=>e.id===targetId)||{}).updatedAt||0)):true;if(ok){$('syncstatus').textContent='Sincronizzazione verificata alle '+new Date().toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'})+'.';log(targetId?'Eureka verificata nel Foglio.':'Archivio verificato nel Foglio.');return true}throw new Error('record non trovato')
+  }catch(e){$('syncstatus').textContent='Copia locale sicura; verifica online non riuscita. Premi “Sincronizza ora” quando sei connesso.';log('Verifica online non riuscita: '+e.message,'error');return false}
+}
+$('syncnow').onclick=()=>syncAndVerify();
+$('pullnow').onclick=async()=>{cfg.url=$('syncurl').value.trim()||cfg.url;cfg.key=$('synckey').value.trim()||cfg.key;persistCfg();if(!cfg.url||!cfg.key)return $('syncstatus').textContent='Inserisci URL e chiave.';try{$('syncstatus').textContent='Recupero in corso…';const remote=await pullRemote();mergeRemote(remote);load();re();rw();$('syncstatus').textContent='Dati recuperati, uniti e salvati in copie locali.';log('Ripristino dal Foglio completato.')}catch(e){$('syncstatus').textContent='Recupero non riuscito. I dati locali restano invariati.';log('Recupero dal Foglio non riuscito.','error')}};
+window.addEventListener('online',()=>{log('Connessione ripristinata: avvio verifica.');syncAndVerify()});
+window.addEventListener('offline',()=>log('Modalità offline: salvataggi locali attivi.'));
 let promptEvent;addEventListener('beforeinstallprompt',e=>{e.preventDefault();promptEvent=e;$('install').style.display='block'});$('install').onclick=async()=>{if(promptEvent){promptEvent.prompt();await promptEvent.userChoice;promptEvent=null;$('install').style.display='none'}};
-if('serviceWorker'in navigator)navigator.serviceWorker.register('./sw.js').then(()=>$('status').textContent='MIC LifeOS 1.1 pronta. Funzionamento offline attivo.').catch(()=>$('status').textContent='Offline disponibile dopo pubblicazione HTTPS.');
-$('date').textContent=new Intl.DateTimeFormat('it-IT',{weekday:'long',day:'numeric',month:'long'}).format(new Date());load();re();
+if('serviceWorker'in navigator)navigator.serviceWorker.register('./sw.js').then(()=>{$('status').textContent='MIC LifeOS 1.2 STABLE pronta. Offline attivo; dati protetti da copie locali e sincronizzazione verificabile.'}).catch(()=>$('status').textContent='Offline disponibile dopo pubblicazione HTTPS.');
+$('date').textContent=new Intl.DateTimeFormat('it-IT',{weekday:'long',day:'numeric',month:'long'}).format(new Date());
+loadInitial();snapshot('avvio applicazione');load();re();renderReliability();
+if(navigator.onLine&&cfg.url&&cfg.key)setTimeout(()=>syncAndVerify(),1200);
 </script>
 </body></html>
+
